@@ -20,18 +20,25 @@ const (
 
 	nodeNotReadyDuration = time.Second * 30
 
-	AnnotationNodeNotReadyTick = "giantswarm.io/node-not-ready-tick"
-	LabelNodeRole              = "role"
-	LabelNodeRoleMaster        = "master"
+	annotationNodeNotReadyTick = "giantswarm.io/node-not-ready-tick"
+	labelNodeRole              = "role"
+	labelNodeRoleMaster        = "master"
 )
 
 type Config struct {
 	Logger    micrologger.Logger
 	K8sClient client.Client
 
+	// MaxNodeTerminationPercentage defines a maximum percentage of nodes that will be returned as 'marked for termination'
+	// ie: if the value is 0.5 and cluster have 10 nodes, than `DetectBadNodes`can only return maximum of 5 nodes
+	// marked for termination at single run
 	MaxNodeTerminationPercentage float64
-	NotReadyTickThreshold        int
-	PauseBetweenTermination      time.Duration
+	// NotReadyTickThreshold defines a how many times the node must bee seen as NotReady in order to return it as 'marked for termination'
+	NotReadyTickThreshold int
+	// PauseBetweenTermination defines a pause between 2 intervals where node termination can occur.
+	// This is a safeguard to prevent nodes being terminated over and over or to not terminate too much at once.
+	// ie: if the value is 5m it means once it returned nodes for termination it wont return another nodes for another 5 min.
+	PauseBetweenTermination time.Duration
 }
 
 type Detector struct {
@@ -43,12 +50,6 @@ type Detector struct {
 	pauseBetweenTermination      time.Duration
 }
 
-// NewTimeLock implements a distributed time lock mechanism mainly used for bad node detection pause period.
-// You can inspect the lock annotations on the default namespace in the TC k8s api.
-// The lock is unique to each component that request the lock.
-//     $ kubectl get ns default --watch | jq '.metadata.annotations'
-//     "aws-operator@6.7.0.timelock.giantswarm.io/until": "Mon Jan 2 15:04:05 MST 2006"
-//
 func NewDetector(config Config) (*Detector, error) {
 	if config.Logger == nil {
 		return nil, microerror.Maskf(invalidConfigError, "%T.Logger must not be empty", config)
@@ -77,7 +78,8 @@ func NewDetector(config Config) (*Detector, error) {
 	return d, nil
 }
 
-func (d *Detector) DetectBadNodes(ctx context.Context, obj interface{}) ([]corev1.Node, error) {
+// DetectBadNodes will return list of nodes that should be terminated which in documentation terminology is used as 'marked for termination'.
+func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 	var nodeList corev1.NodeList
 	{
 		err := d.k8sClient.List(ctx, &nodeList)
@@ -142,15 +144,14 @@ func nodeNotReady(n corev1.Node) bool {
 // depending if the node is Ready or not
 // the annotation is used to track how many times node was seen as not ready
 // and in case it will reach a threshold, the node will be marked for termination.
-// Each reconcilation loop can increase or decrease the tick count by 1.
+// Each run of this function can increase or decrease the tick count by 1.
 func (d *Detector) updateNodeNotReadyTickAnnotations(ctx context.Context, n corev1.Node) (int, error) {
 	var err error
-
 	// fetch current notReady tick count from node
 	// if there is no annotation yet, the value will be 0
 	notReadyTickCount := 0
 	{
-		tick, ok := n.Annotations[AnnotationNodeNotReadyTick]
+		tick, ok := n.Annotations[annotationNodeNotReadyTick]
 		if ok {
 			notReadyTickCount, err = strconv.Atoi(tick)
 			if err != nil {
@@ -171,7 +172,7 @@ func (d *Detector) updateNodeNotReadyTickAnnotations(ctx context.Context, n core
 
 	if updated {
 		// update the tick count on the node
-		n.Annotations[AnnotationNodeNotReadyTick] = fmt.Sprintf("%d", notReadyTickCount)
+		n.Annotations[annotationNodeNotReadyTick] = fmt.Sprintf("%d", notReadyTickCount)
 		err = d.k8sClient.Update(ctx, &n)
 		if err != nil {
 			return -1, microerror.Mask(err)
@@ -181,10 +182,10 @@ func (d *Detector) updateNodeNotReadyTickAnnotations(ctx context.Context, n core
 	return notReadyTickCount, nil
 }
 
-// maximumNodeTermination calculates the maximum number of nodes that can be terminated in single loop
-// the number is calculated with help of key.NodeAutoRepairTerminationPercentage
+// maximumNodeTermination calculates the maximum number of nodes that can be terminated on single run
+// the number is calculated with help of d.maxNodeTerminationPercentage
 // which determines how much percentage of nodes can be terminated
-// the minimum is 1 node termination per reconciliation loop
+// the minimum is 1 node termination per run
 func (d *Detector) maximumNodeTermination(nodeCount int) int {
 	limit := math.Round(float64(nodeCount) * d.maxNodeTerminationPercentage)
 
@@ -200,7 +201,7 @@ func (d *Detector) removeMultipleMasterNodes(ctx context.Context, nodeList []cor
 	var filteredNodes []corev1.Node
 
 	for _, n := range nodeList {
-		if n.Labels[LabelNodeRole] == LabelNodeRoleMaster {
+		if n.Labels[labelNodeRole] == labelNodeRoleMaster {
 			if !foundMasterNode {
 				filteredNodes = append(filteredNodes, n)
 				foundMasterNode = true
