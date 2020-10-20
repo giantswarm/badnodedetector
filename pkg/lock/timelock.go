@@ -129,7 +129,7 @@ func (t *TimeLock) createLock(ctx context.Context, component string) error {
 	return nil
 }
 
-func (t *TimeLock) clearLock(ctx context.Context, component string) error {
+func (t *TimeLock) ClearLock(ctx context.Context, component string) error {
 	var ns corev1.Namespace
 
 	err := t.k8sClient.Get(ctx, types.NamespacedName{Namespace: t.clusterCRNamespace, Name: t.clusterID}, &ns)
