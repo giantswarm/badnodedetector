@@ -20,25 +20,20 @@ type TimeLockConfig struct {
 	Logger    micrologger.Logger
 	K8sClient client.Client
 
-	ClusterID          string
-	ClusterCRNamespace string
-	TTL                time.Duration
+	TTL time.Duration
 }
 
 type TimeLock struct {
 	logger    micrologger.Logger
 	k8sClient client.Client
 
-	clusterID          string
-	clusterCRNamespace string
-	ttl                time.Duration
+	ttl time.Duration
 }
 
 // NewTimeLock implements a distributed time lock mechanism mainly used for bad node detection pause period.
-// It expect that the namespace with the cluster id already exists.
-// You can inspect the lock annotations on the k8s object.
-// The lock is unique to each cluster ID.
-//     $ kubectl get ns CLUSTER_ID --watch | jq '.metadata.annotations'
+// You can inspect the lock annotations on the default namespace in the TC k8s api.
+// The lock is unique to each component that request the lock.
+//     $ kubectl get ns default --watch | jq '.metadata.annotations'
 //     "aws-operator@6.7.0.timelock.giantswarm.io/until": "Mon Jan 2 15:04:05 MST 2006"
 //
 func NewTimeLock(config TimeLockConfig) (*TimeLock, error) {
@@ -48,9 +43,6 @@ func NewTimeLock(config TimeLockConfig) (*TimeLock, error) {
 	if config.K8sClient == nil {
 		return nil, microerror.Maskf(invalidConfigError, "%T.K8sClient must not be empty", config)
 	}
-	if config.ClusterID == "" {
-		return nil, microerror.Maskf(invalidConfigError, "%T.ClusterID must not be empty", config)
-	}
 	if config.TTL == 0 {
 		return nil, microerror.Maskf(invalidConfigError, "%T.TTL must not be zero", config)
 	}
@@ -59,9 +51,7 @@ func NewTimeLock(config TimeLockConfig) (*TimeLock, error) {
 		logger:    config.Logger,
 		k8sClient: config.K8sClient,
 
-		clusterID:          config.ClusterID,
-		clusterCRNamespace: config.ClusterCRNamespace,
-		ttl:                config.TTL,
+		ttl: config.TTL,
 	}
 
 	return d, nil
@@ -75,7 +65,7 @@ func (t *TimeLock) Lock(ctx context.Context, component string) error {
 
 	if locked {
 		// fail since lock is already acquired
-		return microerror.Maskf(alreadyExistsError, fmt.Sprintf("time lock for cluster %s already exists", t.clusterID))
+		return microerror.Maskf(alreadyExistsError, fmt.Sprintf("time lock for the component %s already exists", component))
 	}
 
 	err = t.createLock(ctx, component)
@@ -92,7 +82,7 @@ func (t *TimeLock) isLocked(ctx context.Context, component string) (bool, error)
 
 	var ns corev1.Namespace
 
-	err = t.k8sClient.Get(ctx, types.NamespacedName{Namespace: t.clusterCRNamespace, Name: t.clusterID}, &ns)
+	err = t.k8sClient.Get(ctx, types.NamespacedName{Name: corev1.NamespaceDefault}, &ns)
 	if err != nil {
 		return false, microerror.Mask(err)
 	}
@@ -114,7 +104,7 @@ func (t *TimeLock) isLocked(ctx context.Context, component string) (bool, error)
 func (t *TimeLock) createLock(ctx context.Context, component string) error {
 	var ns corev1.Namespace
 
-	err := t.k8sClient.Get(ctx, types.NamespacedName{Namespace: t.clusterCRNamespace, Name: t.clusterID}, &ns)
+	err := t.k8sClient.Get(ctx, types.NamespacedName{Name: corev1.NamespaceDefault}, &ns)
 	if err != nil {
 		return microerror.Mask(err)
 	}
@@ -132,7 +122,7 @@ func (t *TimeLock) createLock(ctx context.Context, component string) error {
 func (t *TimeLock) ClearLock(ctx context.Context, component string) error {
 	var ns corev1.Namespace
 
-	err := t.k8sClient.Get(ctx, types.NamespacedName{Namespace: t.clusterCRNamespace, Name: t.clusterID}, &ns)
+	err := t.k8sClient.Get(ctx, types.NamespacedName{Name: corev1.NamespaceDefault}, &ns)
 	if err != nil {
 		return microerror.Mask(err)
 	}
