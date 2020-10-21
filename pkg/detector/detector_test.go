@@ -1,12 +1,12 @@
 package detector
 
 import (
-	"strconv"
-	"testing"
-
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strconv"
+	"testing"
+	"time"
 )
 
 func Test_removeMultipleMasterNodes(t *testing.T) {
@@ -349,6 +349,71 @@ func Test_maximumNodeTermination(t *testing.T) {
 
 			if maxNodeCount != tc.expectedNodeCount {
 				t.Fatalf("Expected %d nodes but got %d.\n", tc.expectedNodeCount, maxNodeCount)
+			}
+		})
+	}
+}
+
+func Test_nodeNotReady(t *testing.T) {
+	testCases := []struct {
+		name                 string
+		node                 corev1.Node
+		expectedNodeNotReady bool
+	}{
+		{
+			name: "test 0 - node ready",
+			node: corev1.Node{
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionTrue,
+							LastHeartbeatTime: metav1.Now(),
+						},
+					},
+				},
+			},
+			expectedNodeNotReady: false,
+		},
+		{
+			name: "test 1 - node not ready",
+			node: corev1.Node{
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionFalse,
+							LastHeartbeatTime: metav1.Time{Time: time.Now().Add(-time.Minute * 10)},
+						},
+					},
+				},
+			},
+			expectedNodeNotReady: true,
+		},
+		{
+			name: "test 1 - not ready but only for short time",
+			node: corev1.Node{
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionFalse,
+							LastHeartbeatTime: metav1.Time{Time: time.Now().Add(-time.Second * 10)},
+						},
+					},
+				},
+			},
+			expectedNodeNotReady: false,
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Log(tc.name)
+
+			result := nodeNotReady(tc.node)
+			if result != tc.expectedNodeNotReady {
+				t.Fatalf("Expected %t but got %t.\n", tc.expectedNodeNotReady, result)
 			}
 		})
 	}
