@@ -192,13 +192,16 @@ func maximumNodeTermination(nodeCount int, maxNodeTerminationPercentage float64)
 }
 
 // removeMultipleMasterNodes removes multiple master nodes from the list to avoid more than 1 master node termination at same time
+// worker nodes in the list are unaffected
 func removeMultipleMasterNodes(nodeList []corev1.Node) []corev1.Node {
 	foundMasterNode := false
-	// filteredNodes list will contain maximum 1 master node at the end of the function
+	// filteredNodes list will contain maximum 1 master node and unlimited number of worker nodes at the end of the function
 	var filteredNodes []corev1.Node
 
 	for _, n := range nodeList {
 		if n.Labels[labelNodeRole] == labelNodeRoleMaster {
+			// append only the first master that is found in the list
+			// any following master is not appended to the final list
 			if !foundMasterNode {
 				filteredNodes = append(filteredNodes, n)
 				foundMasterNode = true
@@ -207,6 +210,7 @@ func removeMultipleMasterNodes(nodeList []corev1.Node) []corev1.Node {
 				continue
 			}
 		} else {
+			// append all non-master nodes
 			filteredNodes = append(filteredNodes, n)
 		}
 	}
