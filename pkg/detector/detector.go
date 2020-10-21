@@ -57,6 +57,7 @@ func NewDetector(config Config) (*Detector, error) {
 	if config.K8sClient == nil {
 		return nil, microerror.Maskf(invalidConfigError, "%T.K8sClient must not be empty", config)
 	}
+
 	if config.MaxNodeTerminationPercentage == 0 {
 		config.MaxNodeTerminationPercentage = defaultMaxNodeTerminationPercentage
 	}
