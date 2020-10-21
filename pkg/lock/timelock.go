@@ -20,14 +20,16 @@ type TimeLockConfig struct {
 	Logger    micrologger.Logger
 	K8sClient client.Client
 
-	TTL time.Duration
+	Name string
+	TTL  time.Duration
 }
 
 type TimeLock struct {
 	logger    micrologger.Logger
 	k8sClient client.Client
 
-	ttl time.Duration
+	name string
+	ttl  time.Duration
 }
 
 // NewTimeLock implements a distributed time lock mechanism mainly used for bad node detection pause period.
@@ -43,6 +45,10 @@ func NewTimeLock(config TimeLockConfig) (*TimeLock, error) {
 	if config.K8sClient == nil {
 		return nil, microerror.Maskf(invalidConfigError, "%T.K8sClient must not be empty", config)
 	}
+	if config.Name == "nil" {
+		return nil, microerror.Maskf(invalidConfigError, "%T.Name must not be empty", config)
+
+	}
 	if config.TTL == 0 {
 		return nil, microerror.Maskf(invalidConfigError, "%T.TTL must not be zero", config)
 	}
@@ -51,24 +57,25 @@ func NewTimeLock(config TimeLockConfig) (*TimeLock, error) {
 		logger:    config.Logger,
 		k8sClient: config.K8sClient,
 
-		ttl: config.TTL,
+		name: config.Name,
+		ttl:  config.TTL,
 	}
 
 	return d, nil
 }
 
-func (t *TimeLock) Lock(ctx context.Context, component string) error {
-	locked, err := t.isLocked(ctx, component)
+func (t *TimeLock) Lock(ctx context.Context) error {
+	locked, err := t.isLocked(ctx)
 	if err != nil {
 		return err
 	}
 
 	if locked {
 		// fail since lock is already acquired
-		return microerror.Maskf(alreadyExistsError, fmt.Sprintf("time lock for the component %s already exists", component))
+		return microerror.Maskf(alreadyExistsError, fmt.Sprintf("time lock for the component %s already exists", t.name))
 	}
 
-	err = t.createLock(ctx, component)
+	err = t.createLock(ctx)
 	if err != nil {
 		return microerror.Mask(err)
 	}
@@ -76,7 +83,7 @@ func (t *TimeLock) Lock(ctx context.Context, component string) error {
 	return nil
 }
 
-func (t *TimeLock) isLocked(ctx context.Context, component string) (bool, error) {
+func (t *TimeLock) isLocked(ctx context.Context) (bool, error) {
 	var err error
 	isLocked := false
 
@@ -87,7 +94,7 @@ func (t *TimeLock) isLocked(ctx context.Context, component string) (bool, error)
 		return false, microerror.Mask(err)
 	}
 
-	timeStamp, ok := ns.Annotations[lockName(component)]
+	timeStamp, ok := ns.Annotations[lockName(t.name)]
 	if ok {
 		ts, err := time.Parse(time.UnixDate, timeStamp)
 		if err != nil {
@@ -101,7 +108,7 @@ func (t *TimeLock) isLocked(ctx context.Context, component string) (bool, error)
 	return isLocked, nil
 }
 
-func (t *TimeLock) createLock(ctx context.Context, component string) error {
+func (t *TimeLock) createLock(ctx context.Context) error {
 	var ns corev1.Namespace
 
 	err := t.k8sClient.Get(ctx, types.NamespacedName{Name: corev1.NamespaceDefault}, &ns)
@@ -109,7 +116,7 @@ func (t *TimeLock) createLock(ctx context.Context, component string) error {
 		return microerror.Mask(err)
 	}
 	// add lock timestamp
-	ns.Annotations[lockName(component)] = time.Now().Add(t.ttl).Format(time.UnixDate)
+	ns.Annotations[lockName(t.name)] = time.Now().Add(t.ttl).Format(time.UnixDate)
 
 	err = t.k8sClient.Update(ctx, &ns)
 	if err != nil {

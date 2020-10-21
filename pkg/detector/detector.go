@@ -3,6 +3,7 @@ package detector
 import (
 	"context"
 	"fmt"
+	"github.com/giantswarm/badnodedetector/pkg/lock"
 	"math"
 	"strconv"
 	"time"
@@ -30,6 +31,7 @@ type Config struct {
 	Logger    micrologger.Logger
 	K8sClient client.Client
 
+	LockName string
 	// MaxNodeTerminationPercentage defines a maximum percentage of nodes that will be returned as 'marked for termination'
 	// ie: if the value is 0.5 and cluster have 10 nodes, than `DetectBadNodes`can only return maximum of 5 nodes
 	// marked for termination at single run
@@ -46,6 +48,7 @@ type Detector struct {
 	logger    micrologger.Logger
 	k8sClient client.Client
 
+	lockName                     string
 	maxNodeTerminationPercentage float64
 	notReadyTickThreshold        int
 	pauseBetweenTermination      time.Duration
@@ -57,6 +60,9 @@ func NewDetector(config Config) (*Detector, error) {
 	}
 	if config.K8sClient == nil {
 		return nil, microerror.Maskf(invalidConfigError, "%T.K8sClient must not be empty", config)
+	}
+	if config.LockName == "" {
+		return nil, microerror.Maskf(invalidConfigError, "%T.LockName must not be empty", config)
 	}
 
 	if config.MaxNodeTerminationPercentage == 0 {
@@ -73,6 +79,7 @@ func NewDetector(config Config) (*Detector, error) {
 		logger:    config.Logger,
 		k8sClient: config.K8sClient,
 
+		lockName:                     config.LockName,
 		maxNodeTerminationPercentage: config.MaxNodeTerminationPercentage,
 		notReadyTickThreshold:        config.NotReadyTickThreshold,
 		pauseBetweenTermination:      config.PauseBetweenTermination,
@@ -83,6 +90,23 @@ func NewDetector(config Config) (*Detector, error) {
 
 // DetectBadNodes will return list of nodes that should be terminated which in documentation terminology is used as 'marked for termination'.
 func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
+	var err error
+	var timeLock *lock.TimeLock
+	{
+		config := lock.TimeLockConfig{
+			Logger:    d.logger,
+			K8sClient: d.k8sClient,
+
+			Name: d.lockName,
+			TTL:  d.pauseBetweenTermination,
+		}
+
+		timeLock, err = lock.NewTimeLock(config)
+		if err != nil {
+			return nil, microerror.Mask(err)
+		}
+	}
+
 	var nodeList corev1.NodeList
 	{
 		err := d.k8sClient.List(ctx, &nodeList)
@@ -121,6 +145,14 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 	if len(badNodes) > maxNodeTermination {
 		badNodes = badNodes[:maxNodeTermination]
 		d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("limited node termination to %d nodes", maxNodeTermination))
+	}
+
+	err = timeLock.Lock(ctx)
+	if lock.IsAlreadyExists(err) {
+		d.logger.LogCtx(ctx, "level", "debug", "message", "skipping node termination due to pause period between another termination")
+
+	} else if err != nil {
+		return nil, microerror.Mask(err)
 	}
 
 	return badNodes, nil
