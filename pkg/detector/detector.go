@@ -23,6 +23,7 @@ const (
 	annotationNodeNotReadyTick = "giantswarm.io/node-not-ready-tick"
 	labelNodeRole              = "role"
 	labelNodeRoleMaster        = "master"
+	labelNodeRoleWorker        = "worker"
 )
 
 type Config struct {
@@ -96,11 +97,11 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 	}
 
 	// remove additional master nodes to avoid multiple master node termination at the same time
-	nodesToTerminate = d.removeMultipleMasterNodes(ctx, nodesToTerminate)
+	nodesToTerminate = removeMultipleMasterNodes(nodesToTerminate)
 	d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("found %d nodes marked for termination", len(nodesToTerminate)))
 
 	// check for node termination limit, to prevent termination of all nodes at once
-	maxNodeTermination := d.maximumNodeTermination(len(nodeList.Items))
+	maxNodeTermination := maximumNodeTermination(len(nodeList.Items), d.maxNodeTerminationPercentage)
 	if len(nodesToTerminate) > maxNodeTermination {
 		nodesToTerminate = nodesToTerminate[:maxNodeTermination]
 		d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("limited node termination to %d nodes", maxNodeTermination))
@@ -184,11 +185,11 @@ func (d *Detector) updateNodeNotReadyTickAnnotations(ctx context.Context, n core
 }
 
 // maximumNodeTermination calculates the maximum number of nodes that can be terminated on single run
-// the number is calculated with help of d.maxNodeTerminationPercentage
+// the number is calculated with help of maxNodeTerminationPercentage
 // which determines how much percentage of nodes can be terminated
 // the minimum is 1 node termination per run
-func (d *Detector) maximumNodeTermination(nodeCount int) int {
-	limit := math.Round(float64(nodeCount) * d.maxNodeTerminationPercentage)
+func maximumNodeTermination(nodeCount int, maxNodeTerminationPercentage float64) int {
+	limit := math.Round(float64(nodeCount) * maxNodeTerminationPercentage)
 
 	if limit < 1 {
 		limit = 1
@@ -197,7 +198,7 @@ func (d *Detector) maximumNodeTermination(nodeCount int) int {
 }
 
 // removeMultipleMasterNodes removes multiple master nodes from the list to avoid more than 1 master node termination at same time
-func (d *Detector) removeMultipleMasterNodes(ctx context.Context, nodeList []corev1.Node) []corev1.Node {
+func removeMultipleMasterNodes(nodeList []corev1.Node) []corev1.Node {
 	foundMasterNode := false
 	// filteredNodes list will contain maximum 1 master node at the end of the function
 	var filteredNodes []corev1.Node
@@ -209,7 +210,6 @@ func (d *Detector) removeMultipleMasterNodes(ctx context.Context, nodeList []cor
 				foundMasterNode = true
 			} else {
 				// removing additional master nodes from the list
-				d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("removed master node %s from node termination list to avoid multiple master nodes termination at once", n.Name))
 				continue
 			}
 		} else {
