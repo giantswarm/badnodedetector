@@ -71,8 +71,9 @@ func NewDetector(config Config) (*Detector, error) {
 		logger:    config.Logger,
 		k8sClient: config.K8sClient,
 
-		notReadyTickThreshold:   config.NotReadyTickThreshold,
-		pauseBetweenTermination: config.PauseBetweenTermination,
+		maxNodeTerminationPercentage: config.MaxNodeTerminationPercentage,
+		notReadyTickThreshold:        config.NotReadyTickThreshold,
+		pauseBetweenTermination:      config.PauseBetweenTermination,
 	}
 
 	return d, nil
@@ -130,7 +131,7 @@ func (d *Detector) detectBadNodes(ctx context.Context, nodes []corev1.Node) ([]c
 func nodeNotReady(n corev1.Node) bool {
 	for _, c := range n.Status.Conditions {
 		// find kubelet "ready" condition
-		if c.Type == "Ready" && c.Status != "True" {
+		if c.Type == corev1.NodeReady && c.Status != corev1.ConditionTrue {
 			// kubelet must be in NotReady at least for some time to avoid quick flaps
 			if time.Since(c.LastHeartbeatTime.Time) >= nodeNotReadyDuration {
 				return true
