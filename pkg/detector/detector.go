@@ -114,7 +114,6 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 func (d *Detector) detectBadNodes(ctx context.Context, nodes []corev1.Node) ([]corev1.Node, error) {
 	var badNodes []corev1.Node
 	for _, n := range nodes {
-		//
 		notReadyTickCount, err := d.updateNodeNotReadyTickAnnotations(ctx, n)
 		if err != nil {
 			return nil, microerror.Mask(err)
@@ -200,6 +199,7 @@ func (d *Detector) maximumNodeTermination(nodeCount int) int {
 // removeMultipleMasterNodes removes multiple master nodes from the list to avoid more than 1 master node termination at same time
 func (d *Detector) removeMultipleMasterNodes(ctx context.Context, nodeList []corev1.Node) []corev1.Node {
 	foundMasterNode := false
+	// filteredNodes list will contain maximum 1 master node at the end of the function
 	var filteredNodes []corev1.Node
 
 	for _, n := range nodeList {
