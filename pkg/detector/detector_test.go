@@ -1,12 +1,13 @@
 package detector
 
 import (
-	"github.com/google/go-cmp/cmp"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func Test_removeMultipleMasterNodes(t *testing.T) {
@@ -291,7 +292,7 @@ func Test_removeMultipleMasterNodes(t *testing.T) {
 			filteredNodes := removeMultipleMasterNodes(tc.nodes)
 
 			if len(filteredNodes) != len(tc.expectedNodes) {
-				t.Fatalf("Expected %d nodes but got %d.\n", len(tc.expectedNodes), len(filteredNodes))
+				t.Fatalf("Expected '%d' nodes but got '%d'.\n", len(tc.expectedNodes), len(filteredNodes))
 			}
 
 			if !cmp.Equal(filteredNodes, tc.expectedNodes) {
@@ -348,7 +349,7 @@ func Test_maximumNodeTermination(t *testing.T) {
 			maxNodeCount := maximumNodeTermination(tc.nodeCount, tc.maxNodeTerminationPercentage)
 
 			if maxNodeCount != tc.expectedNodeCount {
-				t.Fatalf("Expected %d nodes but got %d.\n", tc.expectedNodeCount, maxNodeCount)
+				t.Fatalf("Expected '%d' nodes but got '%d'.\n", tc.expectedNodeCount, maxNodeCount)
 			}
 		})
 	}
@@ -413,8 +414,175 @@ func Test_nodeNotReady(t *testing.T) {
 
 			result := nodeNotReady(tc.node)
 			if result != tc.expectedNodeNotReady {
-				t.Fatalf("Expected %t but got %t.\n", tc.expectedNodeNotReady, result)
+				t.Fatalf("Expected '%t' but got '%t'.\n", tc.expectedNodeNotReady, result)
 			}
+		})
+	}
+}
+
+func Test_nodeNotReadyTickCount(t *testing.T) {
+	testCases := []struct {
+		name              string
+		node              corev1.Node
+		expectedTickCount int
+		shouldUpdate      bool
+	}{
+		{
+			name: "test 0 - tick counter not changed - empty annotation",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionTrue,
+							LastHeartbeatTime: metav1.Now(),
+						},
+					},
+				},
+			},
+			expectedTickCount: 0,
+			shouldUpdate:      false,
+		},
+		{
+			name: "test 1 - tick counter not changed",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotationNodeNotReadyTick: "0",
+					},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionTrue,
+							LastHeartbeatTime: metav1.Now(),
+						},
+					},
+				},
+			},
+			expectedTickCount: 0,
+			shouldUpdate:      false,
+		},
+		{
+			name: "test 2 - tick counter increase - no annotation",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionFalse,
+							LastHeartbeatTime: metav1.Time{Time: time.Now().Add(-time.Minute * 10)},
+						},
+					},
+				},
+			},
+			expectedTickCount: 1,
+			shouldUpdate:      true,
+		},
+		{
+			name: "test 3 - tick counter increase",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotationNodeNotReadyTick: "5",
+					},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionFalse,
+							LastHeartbeatTime: metav1.Time{Time: time.Now().Add(-time.Minute * 10)},
+						},
+					},
+				},
+			},
+			expectedTickCount: 6,
+			shouldUpdate:      true,
+		},
+		{
+			name: "test 4 - tick counter decrease",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotationNodeNotReadyTick: "5",
+					},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionTrue,
+							LastHeartbeatTime: metav1.Now(),
+						},
+					},
+				},
+			},
+			expectedTickCount: 4,
+			shouldUpdate:      true,
+		},
+		{
+			name: "test 5 - invalid tick counter - increase",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotationNodeNotReadyTick: "asdefg",
+					},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionFalse,
+							LastHeartbeatTime: metav1.Time{Time: time.Now().Add(-time.Minute * 10)},
+						},
+					},
+				},
+			},
+			expectedTickCount: 1,
+			shouldUpdate:      true,
+		},
+		{
+			name: "test 6 - invalid tick counter - reset to zero",
+			node: corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotationNodeNotReadyTick: "asdefg",
+					},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionTrue,
+							LastHeartbeatTime: metav1.Now(),
+						},
+					},
+				},
+			},
+			expectedTickCount: 0,
+			shouldUpdate:      true,
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Log(tc.name)
+
+			tickCounter, updated := nodeNotReadyTickCount(tc.node)
+			if tickCounter != tc.expectedTickCount {
+				t.Fatalf("Expected tick counter '%d' but got '%d'.\n", tc.expectedTickCount, tickCounter)
+			}
+
+			if updated != tc.shouldUpdate {
+				t.Fatalf("Expected tick counter updated value to be '%t' but got '%t'.\n", tc.shouldUpdate, updated)
+			}
+
 		})
 	}
 }

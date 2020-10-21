@@ -91,39 +91,38 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 		}
 	}
 
-	nodesToTerminate, err := d.detectBadNodes(ctx, nodeList.Items)
-	if err != nil {
-		return nil, microerror.Mask(err)
-	}
-
-	// remove additional master nodes to avoid multiple master node termination at the same time
-	nodesToTerminate = removeMultipleMasterNodes(nodesToTerminate)
-	d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("found %d nodes marked for termination", len(nodesToTerminate)))
-
-	// check for node termination limit, to prevent termination of all nodes at once
-	maxNodeTermination := maximumNodeTermination(len(nodeList.Items), d.maxNodeTerminationPercentage)
-	if len(nodesToTerminate) > maxNodeTermination {
-		nodesToTerminate = nodesToTerminate[:maxNodeTermination]
-		d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("limited node termination to %d nodes", maxNodeTermination))
-	}
-
-	return nodesToTerminate, nil
-}
-
-// detectBadNodes looks at all nodes and adds a tick counter on each node if it sees it as NotReady
-// It will return all nodes which reached threshold for the tick counter.
-func (d *Detector) detectBadNodes(ctx context.Context, nodes []corev1.Node) ([]corev1.Node, error) {
+	// badNodes list will contain all nodes that reached tick threshold and are 'marked for termination'
 	var badNodes []corev1.Node
-	for _, n := range nodes {
-		notReadyTickCount, err := d.updateNodeNotReadyTickAnnotations(ctx, n)
-		if err != nil {
-			return nil, microerror.Mask(err)
-		}
+	for _, n := range nodeList.Items {
+		notReadyTickCount, updated := nodeNotReadyTickCount(n)
 
 		if notReadyTickCount >= d.notReadyTickThreshold {
 			badNodes = append(badNodes, n)
 		}
+
+		// if the tick counter changed, we need to update the value in the k8s api
+		if updated {
+			// update the tick count on the node
+			n.Annotations[annotationNodeNotReadyTick] = fmt.Sprintf("%d", notReadyTickCount)
+			err := d.k8sClient.Update(ctx, &n)
+			if err != nil {
+				return nil, microerror.Mask(err)
+			}
+			d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("updated not ready tick count to %d/%d for node %s", notReadyTickCount, d.notReadyTickThreshold, n.Name))
+		}
 	}
+
+	// remove additional master nodes to avoid multiple master node termination at the same time
+	badNodes = removeMultipleMasterNodes(badNodes)
+	d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("found %d nodes marked for termination", len(badNodes)))
+
+	// check for node termination limit, to prevent termination of all nodes at once
+	maxNodeTermination := maximumNodeTermination(len(nodeList.Items), d.maxNodeTerminationPercentage)
+	if len(badNodes) > maxNodeTermination {
+		badNodes = badNodes[:maxNodeTermination]
+		d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("limited node termination to %d nodes", maxNodeTermination))
+	}
+
 	return badNodes, nil
 }
 
@@ -147,8 +146,11 @@ func nodeNotReady(n corev1.Node) bool {
 // the annotation is used to track how many times node was seen as not ready
 // and in case it will reach a threshold, the node will be marked for termination.
 // Each run of this function can increase or decrease the tick count by 1.
-func (d *Detector) updateNodeNotReadyTickAnnotations(ctx context.Context, n corev1.Node) (int, error) {
+// function return a tick counter (int) and a bool indicating if the value changed
+func nodeNotReadyTickCount(n corev1.Node) (int, bool) {
 	var err error
+	updated := false
+
 	// fetch current notReady tick count from node
 	// if there is no annotation yet, the value will be 0
 	notReadyTickCount := 0
@@ -156,13 +158,14 @@ func (d *Detector) updateNodeNotReadyTickAnnotations(ctx context.Context, n core
 		tick, ok := n.Annotations[annotationNodeNotReadyTick]
 		if ok {
 			notReadyTickCount, err = strconv.Atoi(tick)
+			// in case the annotation is a garbage lets reset to 0 and update it
 			if err != nil {
-				return -1, microerror.Mask(err)
+				notReadyTickCount = 0
+				updated = true
 			}
 		}
 	}
 
-	updated := false
 	// increase or decrease the tick count depending on the node status
 	if nodeNotReady(n) {
 		notReadyTickCount++
@@ -172,16 +175,7 @@ func (d *Detector) updateNodeNotReadyTickAnnotations(ctx context.Context, n core
 		updated = true
 	}
 
-	if updated {
-		// update the tick count on the node
-		n.Annotations[annotationNodeNotReadyTick] = fmt.Sprintf("%d", notReadyTickCount)
-		err = d.k8sClient.Update(ctx, &n)
-		if err != nil {
-			return -1, microerror.Mask(err)
-		}
-		d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("updated not ready tick count to %d/%d for node %s", notReadyTickCount, d.notReadyTickThreshold, n.Name))
-	}
-	return notReadyTickCount, nil
+	return notReadyTickCount, updated
 }
 
 // maximumNodeTermination calculates the maximum number of nodes that can be terminated on single run
