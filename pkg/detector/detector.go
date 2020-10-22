@@ -3,7 +3,6 @@ package detector
 import (
 	"context"
 	"fmt"
-	"github.com/giantswarm/badnodedetector/pkg/lock"
 	"math"
 	"strconv"
 	"time"
@@ -12,6 +11,8 @@ import (
 	"github.com/giantswarm/micrologger"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/giantswarm/badnodedetector/pkg/lock"
 )
 
 const (
