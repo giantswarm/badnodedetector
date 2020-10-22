@@ -45,7 +45,7 @@ func NewTimeLock(config TimeLockConfig) (*TimeLock, error) {
 	if config.K8sClient == nil {
 		return nil, microerror.Maskf(invalidConfigError, "%T.K8sClient must not be empty", config)
 	}
-	if config.Name == "nil" {
+	if config.Name == "" {
 		return nil, microerror.Maskf(invalidConfigError, "%T.Name must not be empty", config)
 
 	}

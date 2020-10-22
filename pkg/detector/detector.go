@@ -147,13 +147,14 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 		badNodes = badNodes[:maxNodeTermination]
 		d.logger.LogCtx(ctx, "level", "debug", "message", fmt.Sprintf("limited node termination to %d nodes", maxNodeTermination))
 	}
+	if len(badNodes) > 0 {
+		err = timeLock.Lock(ctx)
+		if lock.IsAlreadyExists(err) {
+			d.logger.LogCtx(ctx, "level", "debug", "message", "skipping node termination due to pause period between another termination")
 
-	err = timeLock.Lock(ctx)
-	if lock.IsAlreadyExists(err) {
-		d.logger.LogCtx(ctx, "level", "debug", "message", "skipping node termination due to pause period between another termination")
-
-	} else if err != nil {
-		return nil, microerror.Mask(err)
+		} else if err != nil {
+			return nil, microerror.Mask(err)
+		}
 	}
 
 	return badNodes, nil
