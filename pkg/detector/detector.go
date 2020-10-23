@@ -152,6 +152,7 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 		if lock.IsAlreadyExists(err) {
 			d.logger.LogCtx(ctx, "level", "debug", "message", "skipping node termination due to pause period between another termination")
 
+			return nil, nil
 		} else if err != nil {
 			return nil, microerror.Mask(err)
 		}
