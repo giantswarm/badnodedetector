@@ -94,7 +94,7 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 	var err error
 	var timeLock *lock.TimeLock
 	{
-		config := lock.TimeLockConfig{
+		config := lock.Config{
 			Logger:    d.logger,
 			K8sClient: d.k8sClient,
 
@@ -102,7 +102,7 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 			TTL:  d.pauseBetweenTermination,
 		}
 
-		timeLock, err = lock.NewTimeLock(config)
+		timeLock, err = lock.New(config)
 		if err != nil {
 			return nil, microerror.Mask(err)
 		}
