@@ -16,7 +16,7 @@ const (
 	timeLockName = "timelock.giantswarm.io/until"
 )
 
-type TimeLockConfig struct {
+type Config struct {
 	Logger    micrologger.Logger
 	K8sClient client.Client
 
@@ -38,7 +38,7 @@ type TimeLock struct {
 //     $ kubectl get ns default --watch | jq '.metadata.annotations'
 //     "aws-operator@6.7.0.timelock.giantswarm.io/until": "Mon Jan 2 15:04:05 MST 2006"
 //
-func NewTimeLock(config TimeLockConfig) (*TimeLock, error) {
+func New(config Config) (*TimeLock, error) {
 	if config.Logger == nil {
 		return nil, microerror.Maskf(invalidConfigError, "%T.Logger must not be empty", config)
 	}
@@ -114,6 +114,9 @@ func (t *TimeLock) createLock(ctx context.Context) error {
 	err := t.k8sClient.Get(ctx, types.NamespacedName{Name: corev1.NamespaceDefault}, &ns)
 	if err != nil {
 		return microerror.Mask(err)
+	}
+	if ns.Annotations == nil {
+		ns.Annotations = map[string]string{}
 	}
 	// add lock timestamp
 	ns.Annotations[lockName(t.name)] = time.Now().Add(t.ttl).Format(time.UnixDate)
