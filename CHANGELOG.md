@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add github workflows for automatic releases.
+- Add bad node detector code.
 
 [Unreleased]: https://github.com/giantswarm/badnodedetector/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/giantswarm/badnodedetector/releases/tag/v1.0.0
