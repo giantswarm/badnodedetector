@@ -126,6 +126,30 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 	return badNodes, nil
 }
 
+// ResetTickCounters will reset tick counters to zero on all k8s nodes in a cluster
+func (d *Detector) ResetTickCounters(ctx context.Context) error {
+	var nodeList corev1.NodeList
+	{
+		err := d.k8sClient.List(ctx, &nodeList)
+		if err != nil {
+			return microerror.Mask(err)
+		}
+	}
+
+	for _, node := range nodeList.Items {
+		if _, ok := node.GetAnnotations()[annotationNodeNotReadyTick]; ok {
+			node.Annotations[annotationNodeNotReadyTick] = "0"
+
+			err := d.k8sClient.Update(ctx, &node)
+			if err != nil {
+				return microerror.Mask(err)
+			}
+		}
+	}
+
+	return nil
+}
+
 // nodeNotReady returns true of the node is not ready for certain period of time
 // this is used to detect bad nodes
 func nodeNotReady(n corev1.Node) bool {
