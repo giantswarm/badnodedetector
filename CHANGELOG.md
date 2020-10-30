@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `ResetTickCounters` to  reset counters on all nodes in cluster to zero.
+
 ## [1.0.1] - 2020-10-30
 
 ## [1.0.0] - 2020-10-26
