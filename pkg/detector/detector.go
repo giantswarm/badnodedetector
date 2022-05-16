@@ -93,7 +93,7 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 
 	// badNodes list will contain all nodes that reached tick threshold and are 'marked for termination'
 	var badNodes []corev1.Node
-	for _, n := range nodeList.Items {
+	for i, n := range nodeList.Items {
 		notReadyTickCount, updated := nodeNotReadyTickCount(n)
 
 		if notReadyTickCount >= d.notReadyTickThreshold {
@@ -104,7 +104,7 @@ func (d *Detector) DetectBadNodes(ctx context.Context) ([]corev1.Node, error) {
 		if updated {
 			// update the tick count on the node
 			n.Annotations[annotationNodeNotReadyTick] = fmt.Sprintf("%d", notReadyTickCount)
-			err := d.k8sClient.Update(ctx, &n)
+			err := d.k8sClient.Update(ctx, &nodeList.Items[i])
 			if err != nil {
 				return nil, microerror.Mask(err)
 			}
@@ -136,11 +136,11 @@ func (d *Detector) ResetTickCounters(ctx context.Context) error {
 		}
 	}
 
-	for _, node := range nodeList.Items {
+	for i, node := range nodeList.Items {
 		if _, ok := node.GetAnnotations()[annotationNodeNotReadyTick]; ok {
 			node.Annotations[annotationNodeNotReadyTick] = "0"
 
-			err := d.k8sClient.Update(ctx, &node)
+			err := d.k8sClient.Update(ctx, &nodeList.Items[i])
 			if err != nil {
 				return microerror.Mask(err)
 			}
