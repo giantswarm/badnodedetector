@@ -1,10 +1,12 @@
 package detector
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/giantswarm/micrologger"
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -356,6 +358,8 @@ func Test_maximumNodeTermination(t *testing.T) {
 }
 
 func Test_isNodeUnhealthy(t *testing.T) {
+	const diskFullCondition corev1.NodeConditionType = "DiskFull"
+
 	testCases := []struct {
 		name                 string
 		node                 corev1.Node
@@ -452,7 +456,9 @@ func Test_isNodeUnhealthy(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Log(tc.name)
 
-			result := isNodeUnhealthy(tc.node)
+			logger, _ := micrologger.New(micrologger.Config{})
+
+			result := isNodeUnhealthy(context.Background(), logger, tc.node)
 			if result != tc.expectedNodeNotReady {
 				t.Fatalf("Expected '%t' but got '%t'.\n", tc.expectedNodeNotReady, result)
 			}
@@ -614,7 +620,9 @@ func Test_nodeNotReadyTickCount(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Log(tc.name)
 
-			tickCounter, updated := nodeNotReadyTickCount(tc.node)
+			logger, _ := micrologger.New(micrologger.Config{})
+
+			tickCounter, updated := nodeNotReadyTickCount(context.Background(), logger, tc.node)
 			if tickCounter != tc.expectedTickCount {
 				t.Fatalf("Expected tick counter '%d' but got '%d'.\n", tc.expectedTickCount, tickCounter)
 			}
