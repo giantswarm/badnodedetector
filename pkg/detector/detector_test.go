@@ -355,7 +355,7 @@ func Test_maximumNodeTermination(t *testing.T) {
 	}
 }
 
-func Test_nodeNotReady(t *testing.T) {
+func Test_isNodeUnhealthy(t *testing.T) {
 	testCases := []struct {
 		name                 string
 		node                 corev1.Node
@@ -392,7 +392,7 @@ func Test_nodeNotReady(t *testing.T) {
 			expectedNodeNotReady: true,
 		},
 		{
-			name: "test 1 - not ready but only for short time",
+			name: "test 2 - not ready but only for short time",
 			node: corev1.Node{
 				Status: corev1.NodeStatus{
 					Conditions: []corev1.NodeCondition{
@@ -406,13 +406,53 @@ func Test_nodeNotReady(t *testing.T) {
 			},
 			expectedNodeNotReady: false,
 		},
+		{
+			name: "test 3 - ready but disk full",
+			node: corev1.Node{
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionTrue,
+							LastHeartbeatTime: metav1.Time{Time: time.Now().Add(-time.Minute * 10)},
+						},
+						{
+							Type:              diskFullCondition,
+							Status:            corev1.ConditionTrue,
+							LastHeartbeatTime: metav1.Time{Time: time.Now().Add(-time.Minute * 10)},
+						},
+					},
+				},
+			},
+			expectedNodeNotReady: true,
+		},
+		{
+			name: "test 4 - ready but disk full for a short time",
+			node: corev1.Node{
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:              corev1.NodeReady,
+							Status:            corev1.ConditionTrue,
+							LastHeartbeatTime: metav1.Time{Time: time.Now().Add(-time.Minute * 10)},
+						},
+						{
+							Type:              diskFullCondition,
+							Status:            corev1.ConditionTrue,
+							LastHeartbeatTime: metav1.Time{Time: time.Now().Add(-time.Second * 10)},
+						},
+					},
+				},
+			},
+			expectedNodeNotReady: false,
+		},
 	}
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Log(tc.name)
 
-			result := nodeNotReady(tc.node)
+			result := isNodeUnhealthy(tc.node)
 			if result != tc.expectedNodeNotReady {
 				t.Fatalf("Expected '%t' but got '%t'.\n", tc.expectedNodeNotReady, result)
 			}
