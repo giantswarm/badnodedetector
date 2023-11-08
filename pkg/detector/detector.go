@@ -167,7 +167,7 @@ func isNodeUnhealthy(ctx context.Context, logger micrologger.Logger, n corev1.No
 			if fmt.Sprintf("%s", c.Type) == trueCondition && c.Status != corev1.ConditionTrue {
 				// We want condition to be true, but it's not.
 				if time.Since(c.LastHeartbeatTime.Time) >= nodeNotReadyDuration {
-					logger.Debugf(ctx, "node %s is unhealthy because we expected condition %s to be true, but was false")
+					logger.Debugf(ctx, "node %s is unhealthy because we expected condition %s to be true, but was false", n.Name, c.Type)
 					return true
 				}
 			}
@@ -180,7 +180,7 @@ func isNodeUnhealthy(ctx context.Context, logger micrologger.Logger, n corev1.No
 			if fmt.Sprintf("%s", c.Type) == falseCondition && c.Status == corev1.ConditionTrue {
 				// we want condition to be false, but it's not.
 				if time.Since(c.LastHeartbeatTime.Time) >= nodeNotReadyDuration {
-					logger.Debugf(ctx, "node %s is unhealthy because we expected condition %s to be false, but was true")
+					logger.Debugf(ctx, "node %s is unhealthy because we expected condition %s to be false, but was true", n.Name, c.Type)
 					return true
 				}
 			}
