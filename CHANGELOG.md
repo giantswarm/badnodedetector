@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Also use `DiskFull` custom node condition to consider a node unhealthy.
+- Consider `DiskFull` custom node conditions created by `node-problem-detector` app to check if a node is unhealthy.
 
 ## [2.0.0] - 2022-05-16
 
