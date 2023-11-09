@@ -1,4 +1,4 @@
-module github.com/giantswarm/badnodedetector/v2
+module github.com/giantswarm/badnodedetector/v3
 
 go 1.17
 
