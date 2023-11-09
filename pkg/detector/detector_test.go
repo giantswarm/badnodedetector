@@ -358,7 +358,7 @@ func Test_maximumNodeTermination(t *testing.T) {
 }
 
 func Test_isNodeUnhealthy(t *testing.T) {
-	const diskFullCondition corev1.NodeConditionType = "DiskFull"
+	const diskFullCondition corev1.NodeConditionType = "DiskFullKubelet"
 
 	testCases := []struct {
 		name                 string
