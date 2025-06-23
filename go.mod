@@ -1,6 +1,8 @@
 module github.com/giantswarm/badnodedetector/v3
 
-go 1.17
+go 1.22
+
+toolchain go1.24.3
 
 require (
 	github.com/giantswarm/microerror v0.4.0
@@ -51,3 +53,5 @@ replace (
 	github.com/prometheus/client_golang => github.com/prometheus/client_golang v1.17.0
 	golang.org/x/net => golang.org/x/net v0.17.0
 )
+
+replace google.golang.org/protobuf v1.31.0 => google.golang.org/protobuf v1.36.6
