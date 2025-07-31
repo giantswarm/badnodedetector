@@ -1,9 +1,4 @@
-# Hashicorp consul and sdk are not intended for public use and will not receive updates.
-# Waiting for more direct dependencies to move away.
-CVE-2022-29153
-CVE-2022-24687
-
-# pkg:golang/google.golang.org/grpc
-CVE-2023-32731 until=2023-12-31
-
-CVE-2020-8561
+CVE-2025-22870 until=2025-07-23 # golang.org/x/net@v0.17.0
+CVE-2025-22872 until=2025-07-23 # golang.org/x/net@v0.17.0
+CVE-2024-45338 until=2025-07-23 # golang.org/x/net@v0.17.0
+CVE-2025-4673 until=2025-07-13 # golang.org/x/net@v0.17.0
